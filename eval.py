@@ -1,7 +1,7 @@
 from utils.metrics import cls_metrics, convert_iou
 import numpy as np
 import pickle
-from data.process import downsample_sec_gt
+# from data.process import downsample_sec_gt
 import torch
 
 gt = pickle.load(open('data/hatemm_gt.pkl', 'rb'))
