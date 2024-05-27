@@ -1,4 +1,4 @@
-# LAHVD: Exploring Large Language Pre-trained Models for Hate Video Detection
+# [In Construction] LAHVD: Exploring Large Language Pre-trained Models for Hate Video Detection
 The complete code will be released after the paper is accepted.
 
 <!--## 1. Introduction
