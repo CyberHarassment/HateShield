@@ -1,5 +1,5 @@
 # [In Construction] LAHVD: Exploring Large Language Pre-trained Models for Hate Video Detection
-The complete code will be released after the paper is accepted.
+The complete code will be released soon.
 
 <!--## 1. Introduction
 This repository contains the code for our paper "LAHVD: Exploring Large Language Pre-trained Models for Hate Video Detection". Run `eval.py` to obtain the results of our proposed LAHVD method.-->
