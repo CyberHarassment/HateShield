@@ -4,12 +4,20 @@ import pickle
 # from data.process import downsample_sec_gt
 import torch
 
-gt = pickle.load(open('data/hatemm_gt.pkl', 'rb'))
+def get_videos_gt(data_dict):
+    videos_gt = {}
+    for fold in data_dict:
+        for split in data_dict[fold]:
+            for video in data_dict[fold][split]:
+                if video['name'] not in videos_gt:
+                    videos_gt[video['name']] = video
+    return videos_gt
 
-pred = pickle.load(open('data/trainquery.pkl', 'rb'))
+gt_ = pickle.load(open('data/final_clean_gt.pkl', 'rb'))
+gt = get_videos_gt(gt_)
+pred = pickle.load(open('results/LAHVD_L.pkl', 'rb'))
 
-keys = list(pred.keys())
-print(f"Total number of predictions: {len(keys)}")
+keys = list(gt.keys())
 all_preds = []
 all_labels = []
 all_seg_preds = []
@@ -21,10 +29,8 @@ for key in keys:
     all_labels.append(gt[key]['class'])
 
 
-    pred_seg = pred[key]['segment']
-    gt_seg = gt[key]['segment']
-    # gt_seg = downsample_sec_gt(gt_seg).numpy()
-    gt_seg = gt_seg.numpy()
+    pred_seg = pred[key]['seg']
+    gt_seg = gt[key]['seg']
     # upsample pred_seg to 5 seconds by torch.repeat_interleave
     pred_seg = torch.tensor(pred_seg).repeat_interleave(5).numpy()[:len(gt_seg)]
     

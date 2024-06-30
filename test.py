@@ -1,8 +1,7 @@
 import os
 import torch
 import pickle
-from data.datasets import FinalDataset
-from data.process import final_gap
+from data.datasets import FinalDataset, GAP
 import numpy as np
 from utils.metrics import cls_metrics
 from tqdm import tqdm
@@ -22,7 +21,7 @@ def get_query_features(trainset):
         transcript = data["transcript"]
         audio = data["audio"]
         ocr = data["ocr"]
-        label = data["label"]
+        label = data["class"]
         # print(label.item())
         if label.item() == 0:
             visual_features_c0.append(visual)
@@ -55,7 +54,6 @@ def get_query_features(trainset):
 def get_query_features_category():
     import clip as CLIP
     import laion_clap
-    #  a particular race, religion, gender, sexual orientation, or other category
     vq = ["a normal photo", "a hateful or offensive photo that specifically targets a particular race, religion, gender, sexual orientation, or other category"]
     tq = ["a normal speech", "a hateful or offensive speech that specifically targets a particular race, religion, gender, sexual orientation, or other category"]
     aq = ["a normal audio", "a hateful or offensive audio that specifically targets a particular race, religion, gender, sexual orientation, or other category"]
@@ -63,7 +61,6 @@ def get_query_features_category():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model, preprocess = CLIP.load('ViT-B/32', device)
     clip_ = {"model": model, "preprocess": preprocess}
-    # clap_ = CLAP(version = '2023', use_cuda=True if device == "cuda" else False) # this is msclap
     clap_ = laion_clap.CLAP_Module(enable_fusion=False, device=device) # this is laion_clap
     clap_.load_ckpt()
     with torch.no_grad():
@@ -89,7 +86,7 @@ def compute_similarity(query, features):
 
 def pred_per_video(video_data, query, show_info=True, sim_thres=0.65, num_modals_thres=2, num_clips_thres=2):
     if show_info:
-        print("current video label: ", video_data["label"].item())
+        print("current video label: ", video_data["class"].item())
     visual = video_data["visual"]
     transcript = video_data["transcript"]
     audio = video_data["audio"]
@@ -103,35 +100,16 @@ def pred_per_video(video_data, query, show_info=True, sim_thres=0.65, num_modals
         print("transcript similarity: ", transcript_sim)
         print("audio similarity: ", audio_sim)
         print("ocr similarity: ", ocr_sim)
-    
-    '''
-    visual_pred = visual_sim.argmax(dim = -1)
-    transcript_pred = transcript_sim.argmax(dim = -1)
-    audio_pred = audio_sim.argmax(dim = -1)
-    ocr_pred = ocr_sim.argmax(dim = -1)
-    if show_info:
-        print("visual prediction: ", visual_pred)
-        print("transcript prediction: ", transcript_pred)
-        print("audio prediction: ", audio_pred)
-        print("ocr prediction: ", ocr_pred)
-    if sum(visual_pred) >= 2 or sum(transcript_pred) >= 1 or sum(audio_pred) >= 1 or sum(ocr_pred) >= 2:
-        pred = 1
-    else:
-        pred = 0
-    '''
 
     all_sim_positives = torch.cat([visual_sim[:,1].unsqueeze(1), 
                                    transcript_sim[:,1].unsqueeze(1), 
                                    audio_sim[:,1].unsqueeze(1), 
                                    ocr_sim[:,1].unsqueeze(1)
                                    ], dim=1)
-    
-    # all_sim_positives = 0.4*visual_sim + 0.4*transcript_sim + 0.1*audio_sim + 0.1*ocr_sim
-    # all_sim_positives = all_sim_positives[:,1].unsqueeze(1)
 
     all_sim_positives[all_sim_positives < sim_thres] = 0
     all_sim_positives[all_sim_positives >= sim_thres] = 1
-    all_sim_positives = all_sim_positives.sum(dim=1) # sum over all modalities
+    all_sim_positives = all_sim_positives.sum(dim=1)
     all_sim_positives[all_sim_positives < num_modals_thres] = 0
     all_sim_positives[all_sim_positives >= num_modals_thres] = 1
     if all_sim_positives.sum() >= num_clips_thres or all_sim_positives.sum() == len(all_sim_positives):
@@ -144,10 +122,8 @@ def pred_per_video(video_data, query, show_info=True, sim_thres=0.65, num_modals
 
 def test_fold(data_dir, all_data_dict, fold, sim_thres=0.65, num_modals_thres=2, num_clips_thres=2, save_pred=None):
     data_dict = all_data_dict[fold]
-    seg_gt_file = "./data/hatemm_sec_gt.pkl"
-    trainset = FinalDataset(data_dict, data_dir, seg_gt_file=seg_gt_file, split='train', preprocess=final_gap)
-    # testset = FinalDataset(data_dict, data_dir, split='val')
-    testset = FinalDataset(data_dict, data_dir, seg_gt_file=seg_gt_file, split='test')
+    trainset = FinalDataset(data_dir, data_dict, split='train', preprocess=GAP())
+    testset = FinalDataset(data_dir, data_dict, split='test')
 
     with torch.no_grad():
         query = get_query_features(trainset)
@@ -158,14 +134,15 @@ def test_fold(data_dir, all_data_dict, fold, sim_thres=0.65, num_modals_thres=2,
     progress_bar = tqdm(range(len(testset)))
     for i in progress_bar:
         data = testset[i]
-        save_pred[testset.video_names[i]] = {}
+        name = data["name"]
+        save_pred[name] = {}
         # print(testset.video_names[i])
         with torch.no_grad():
             pred, seg = pred_per_video(data, query, show_info=False, sim_thres=sim_thres, num_modals_thres=num_modals_thres, num_clips_thres=num_clips_thres)
-        save_pred[testset.video_names[i]]['class'] = pred
-        save_pred[testset.video_names[i]]['segment'] = seg
+        save_pred[name]['class'] = pred
+        save_pred[name]['seg'] = seg
         all_preds.append(pred)
-        all_labels.append(data["label"].item())
+        all_labels.append(data["class"].item())
         progress_bar.set_description(f"{fold}: {i}/{len(testset)}")
 
     all_preds = np.array(all_preds)
@@ -178,16 +155,16 @@ if __name__ == '__main__':
     device = "cuda" if torch.cuda.is_available() else "cpu"
     torch.cuda.empty_cache()
     data_dir = './HateMM/features'
-    data_file = './data/hatemm_allFoldDetails.pkl'
+    data_file = './data/final_clean_gt.pkl'
     all_data_dict = pickle.load(open(data_file, 'rb'))
     folds = ['fold1', 'fold2', 'fold3', 'fold4', 'fold5']
-    save_dir = './results/zeroshot_trainvaltest'
+    save_dir = './results'
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    sim_thres = 0.65
+    sim_thres = 0.7
     num_modals_thres = 2
-    num_clips_thres = 3
+    num_clips_thres = 2
     save_pred = {}
     cur_results = {}
     for fold in folds:
@@ -202,5 +179,5 @@ if __name__ == '__main__':
     print(cur_print)
     
     print(f"Total number of predictions: {len(save_pred.keys())}")
-    with open('data/text_query.pkl', 'wb') as f:
+    with open(os.path.join(save_dir, "LAHVD_L.pkl"), 'wb') as f:
         pickle.dump(save_pred, f)
