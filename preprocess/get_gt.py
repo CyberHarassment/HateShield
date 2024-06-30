@@ -142,8 +142,8 @@ def save_annotations(annotations, save_path):
         pickle.dump(annotations, f)
 
 if __name__ == '__main__':
-    root_dir = "/scratch/jin7/datasets/hatemm"
-    csv_file = os.path.join(root_dir, "HateMM-clean_annotation.csv")
+    root_dir = "path-to-root-dir-of-hatemm"
+    csv_file = "./data/HateMM-clean_annotation.csv"
     save_path = "../data/final_clean_gt.pkl"
     annotations = gtcsv_to_ann(csv_file, root_dir)
     annotations = split_annotations(annotations)
